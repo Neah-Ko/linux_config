@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+import i3ipc
+from Xlib import display, Xatom
+import threading
+import time
+
+TRANSPARENT_APPS = {"Xfce4-terminal", "firefox-esr", "Code", "Microsoft-edge"}
+OPACITY_ACTIVE = {
+    "Xfce4-terminal": 0.80,
+    "firefox-esr": 0.88,
+    "Code": 0.88,
+    "Microsoft-edge": 0.88,
+}
+OPACITY_INACTIVE_TABBED = 0.0
+
+_ALL_OPACITIES = set(OPACITY_ACTIVE.values()) | {OPACITY_INACTIVE_TABBED, 0.9, 1.0}
+_OPACITY_VALS = {op: int(op * 0xFFFFFFFF) for op in _ALL_OPACITIES}
+
+i3 = i3ipc.Connection()
+d = display.Display()
+atom = d.intern_atom('_NET_WM_WINDOW_OPACITY')
+
+_window_cache = {}       # con.id -> {xid, xobj, app, tabbed}
+_xwindow_cache = {}      # xid    -> Xlib window object
+_current_opacity = {}    # xid    -> last sent int value
+
+_pending = {}
+_pending_event = threading.Event()
+_binding_event = threading.Event()
+prev_focused_id = None
+
+
+def _cache_window(con):
+    """Cache window on main thread where Xlib object creation is safe."""
+    if not con.window:
+        return
+    xobj = d.create_resource_object('window', con.window)
+    _window_cache[con.id] = {
+        "xid": con.window,
+        "xobj": xobj,
+        "app": con.window_class or "",
+        "tabbed": con.parent and con.parent.layout == "tabbed",
+    }
+    _xwindow_cache[con.window] = xobj
+
+
+def set_opacity(win_id, opacity) -> bool:
+    """Enqueue opacity change if value differs. Never blocks."""
+    val = _OPACITY_VALS.get(opacity) or int(opacity * 0xFFFFFFFF)
+    if _current_opacity.get(win_id) == val:
+        return False
+    _current_opacity[win_id] = val
+    _pending[win_id] = val
+    _pending_event.set()
+    return True
+
+
+def flush_worker():
+    """Dedicated X flush thread — never blocks i3 event loop."""
+    while True:
+        _pending_event.wait()
+        _pending_event.clear()
+        snapshot = list(_pending.items())
+        _pending.clear()
+        for win_id, val in snapshot:
+            xobj = _xwindow_cache.get(win_id)
+            if xobj:
+                xobj.change_property(atom, Xatom.CARDINAL, 32, [val])
+        d.flush()
+
+
+def binding_worker():
+    """Persistent debounce thread — zero allocations per keypress."""
+    while True:
+        _binding_event.wait()
+        _binding_event.clear()
+        time.sleep(0.03)
+        if not _binding_event.is_set():
+            update_opacities(i3)
+
+
+threading.Thread(target=flush_worker, daemon=True).start()
+threading.Thread(target=binding_worker, daemon=True).start()
+
+
+def build_cache(tree):
+    """Single tree walk — captures focused id during iteration."""
+    _window_cache.clear()
+    focused_id = None
+    for con in tree.leaves():
+        if con.focused:
+            focused_id = con.id
+        _cache_window(con)
+    return focused_id
+
+
+def update_opacities(i3, event=None):
+    """Full refresh — only on binding/move/new."""
+    tree = i3.get_tree()
+    focused_id = build_cache(tree)
+
+    for con_id, info in _window_cache.items():
+        if info["app"] not in TRANSPARENT_APPS:
+            continue
+        is_focused = con_id == focused_id
+        opacity = (
+            OPACITY_INACTIVE_TABBED if info["tabbed"] and not is_focused
+            else OPACITY_ACTIVE.get(info["app"], 0.9)
+        )
+        set_opacity(info["xid"], opacity)
+
+
+def on_focus(i3, event):
+    global prev_focused_id
+    con = event.container
+    app = con.window_class or ""
+
+    # Floating popup steals focus: leave everything untouched and don't update
+    # prev_focused_id so the correct window is restored when focus returns.
+    if con.floating in ("auto_on", "user_on"):
+        return
+
+    if app in TRANSPARENT_APPS and con.window:
+        set_opacity(con.window, OPACITY_ACTIVE.get(app, 0.9))
+
+    if prev_focused_id and prev_focused_id != con.id and prev_focused_id in _window_cache:
+        info = _window_cache[prev_focused_id]
+        if info["app"] in TRANSPARENT_APPS:
+            # Only go fully transparent if focus moved to another tabbed window.
+            # This prevents any popup (floating or tiled) from triggering the dim.
+            new_info = _window_cache.get(con.id)
+            going_to_tabbed = new_info["tabbed"] if new_info else False
+            opacity = (
+                OPACITY_INACTIVE_TABBED if info["tabbed"] and going_to_tabbed
+                else OPACITY_ACTIVE.get(info["app"], 0.9)
+            )
+            set_opacity(info["xid"], opacity)
+
+    prev_focused_id = con.id
+
+
+def on_window_new(i3, event):
+    """Incremental add — full refresh only if window is transparent."""
+    con = event.container
+    _cache_window(con)
+    if (con.window_class or "") in TRANSPARENT_APPS:
+        update_opacities(i3)
+
+
+def on_window_close(i3, event):
+    """O(1) eviction — no tree fetch."""
+    con_id = event.container.id
+    info = _window_cache.pop(con_id, None)
+    if info:
+        win_id = info["xid"]
+        _xwindow_cache.pop(win_id, None)
+        _current_opacity.pop(win_id, None)
+        _pending.pop(win_id, None)
+
+
+def on_binding(i3, _):
+    _binding_event.set()
+
+
+i3.on("window::focus", on_focus)
+i3.on("window::move", update_opacities)
+i3.on("window::new", on_window_new)
+i3.on("window::close", on_window_close)
+i3.on("binding", on_binding)
+
+update_opacities(i3)
+i3.main()

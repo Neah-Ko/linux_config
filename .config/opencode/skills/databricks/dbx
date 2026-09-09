@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# dbx shim — resolves an interpreter that has databricks-sql-connector, then runs dbx.py.
+# Resolution order:
+#   1. $DBX_PYTHON
+#   2. nearest ./.venv/bin/python walking up from CWD (any uv repo) that imports the connector
+#   3. `uv run --script` (installs the connector from dbx.py PEP 723 metadata)
+#   4. python3 (errors clearly if connector missing)
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script="$here/dbx.py"
+
+has_connector() { "$1" -c "import databricks.sql" >/dev/null 2>&1; }
+
+if [[ -n "${DBX_PYTHON:-}" ]]; then
+  exec "$DBX_PYTHON" "$script" "$@"
+fi
+
+d="$PWD"
+while [[ "$d" != "/" ]]; do
+  py="$d/.venv/bin/python"
+  if [[ -x "$py" ]] && has_connector "$py"; then
+    exec "$py" "$script" "$@"
+  fi
+  d="$(dirname "$d")"
+done
+
+if command -v uv >/dev/null 2>&1; then
+  exec uv run --quiet --script "$script" "$@"
+fi
+
+exec python3 "$script" "$@"

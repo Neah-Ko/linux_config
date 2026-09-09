@@ -1,0 +1,67 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["~/.config/opencode/AGENTS.md"],
+  "plugin": ["@tarquinen/opencode-dcp@latest"],
+  "model": "github-copilot/claude-sonnet-4-6",
+  "small_model": "github-copilot/gpt-5-mini",
+  "compaction": {
+    "auto": true,
+    "prune": true
+  },
+  "permission": {
+    "bash": {
+      "*": "allow",
+      "rm *": "deny",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "gh pr *": "deny"
+    }
+  },
+  "default_agent": "plan",
+  "agent": {
+    "build": {
+      "disable": true
+    },
+    "plan": {
+      "model": "github-copilot/claude-sonnet-4.6",
+      "description": "Use for planning, analyzing code, and reviewing suggestions without making changes. Invoke automatically when the user asks to plan, review, or analyze.",
+      "maxTokens": 2000,
+      "prompt": "Be concise. Provide only actionable plans. No preamble or summaries unless asked. MUST invoke @tester for any test execution — do not describe test steps.",
+      "color": "primary",
+      "variant": "medium"
+    },
+    "coder": {
+      "model": "github-copilot/gpt-5-mini",
+      "description": "Use for writing, editing, and refactoring code.",
+      "prompt": "Be concise. Write and edit code directly without planning or explanation. Only provide short and meaningful comments. No preamble or summaries unless asked. MUST invoke @tester after any code change requiring tests — do not run tests yourself.",
+      "maxTokens": 8000,
+      "maxIterations": 15,
+      "variant": "high"
+    },
+    "task": {
+      "model": "github-copilot/claude-sonnet-4.6",
+      "mode": "subagent",
+      "description": "Use for breaking down and executing multi-step tasks. Invoke automatically for complex workflows requiring sequential steps. Always delegate test execution to @tester.",
+      "maxTokens": 3000,
+      "prompt": "Be concise. Break tasks into minimal steps. No filler text.",
+      "variant": "medium"
+    },
+    "explore": {
+      "model": "github-copilot/gpt-5-mini"
+    },
+    "tester": {
+      "model": "github-copilot/gpt-5-mini",
+      "mode": "subagent",
+      "description": "ALWAYS Invoke for ALL test execution. Returns a structured summary of results.",
+      "maxTokens": 5000,
+      "prompt": "Run tests with `rtk uv run pytest`. After completion, output ONLY a short structured summary: status (PASS/FAIL), number of tests passed/failed, and any critical errors. No prose."
+    },
+    "title": {
+      "model": "github-copilot/gpt-5-mini",
+      "maxTokens": 200
+    },
+    "summary": {
+      "model": "github-copilot/gpt-5-mini",
+      "maxTokens": 2000
+  }
+}
