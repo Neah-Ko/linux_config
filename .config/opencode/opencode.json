@@ -1,0 +1,182 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "shell": "/home/ejodry/.config/opencode/uv-shell.sh",
+  "theme": "transparent",
+  "instructions": ["~/.config/opencode/AGENTS.md"],
+  "plugin": ["@tarquinen/opencode-dcp@latest", "opencode-claude-auth@latest", "@slkiser/opencode-quota@latest"],
+  "model": "github-copilot/claude-sonnet-4-6",
+  "small_model": "github-copilot/gpt-5-mini",
+  "compaction": {
+    "auto": true,
+    "prune": true
+  },
+  "permission": {
+    "read": { "/tmp/**": "allow" },
+    "write": { "/tmp/**": "allow" },
+    "edit": { "/tmp/**": "allow" },
+    "external_directory": { "/tmp/*": "allow" },
+    "bash": {
+      "*": "allow",
+      "rm *": "deny",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "gh pr *": "deny",
+      "rtk gh pr *": "deny",
+      "gh pr view*": "allow",
+      "gh pr list*": "allow",
+      "gh pr diff*": "allow",
+      "gh pr checks*": "allow",
+      "gh pr status*": "allow",
+      "rtk gh pr view*": "allow",
+      "rtk gh pr list*": "allow",
+      "rtk gh pr diff*": "allow",
+      "rtk gh pr checks*": "allow",
+      "rtk gh pr status*": "allow",
+      "gh pr create*": "deny",
+      "gh pr merge*": "deny",
+      "gh pr close*": "deny",
+      "gh pr reopen*": "deny",
+      "gh pr comment*": "deny",
+      "gh pr review*": "deny",
+      "gh pr edit*": "deny",
+      "gh pr ready*": "deny",
+      "rtk gh pr create*": "deny",
+      "rtk gh pr merge*": "deny",
+      "rtk gh pr comment*": "deny",
+      "rtk gh pr review*": "deny"
+    }
+  },
+  "mcp": {
+    "atlassian": {
+      "type": "local",
+      "command": ["uvx", "mcp-atlassian"],
+      "environment": {
+        "CONFLUENCE_URL": "https://confluence.se.com/",
+        "CONFLUENCE_PERSONAL_TOKEN": "",
+        "HTTPS_PROXY": "http://127.0.0.1:9000",
+        "HTTP_PROXY": "http://127.0.0.1:9000",
+        "NO_PROXY": "localhost,127.0.0.1"
+      },
+      "enabled": true,
+      "description": "Invoke to fetch confluence pages, when given spec page id."
+    },
+    "ecostruxure-data-model": {
+      "type": "remote",
+      "url": "https://func-rag-assteqdef-dev-01.azurewebsites.net/mcp/",
+      "enabled": true,
+      "description": "Invoke to fetch Ecostructure Data Modeling, which contains the onthology of the team."
+    },
+    "azure-devops": {
+      "type": "local",
+      "command": ["npx", "-y", "@azure-devops/mcp", "se-tfs", "--authentication", "azcli"],
+      "environment": { "ado_mcp_project": "ESXP-Apps" },
+      "enabled": true,
+      "description": "Invoke to fetch Product Backlog Items (PBIs), given its id."
+    },
+    "pdf-reader": {
+      "type": "local",
+      "command": ["npx", "-y", "@sylphx/pdf-reader-mcp"],
+      "enabled": true
+    },
+    "markitdown": {
+      "type": "local",
+      "command": ["markitdown-mcp"],
+      "enabled": true
+    }
+  },
+  "default_agent": "plan",
+  "agent": {
+    "build": {
+      "disable": true
+    },
+    "general": {
+      "disable": true
+    },
+    "plan": {
+      "model": "{env:OC_MODEL_HEAVY}",
+      "description": "Use for planning, analyzing code, and reviewing suggestions without making changes. Invoke automatically when the user asks to plan, review, or analyze.",
+      "maxTokens": 80000,
+      "prompt": "Be concise. Provide only actionable plans. No preamble or summaries unless asked. MUST invoke @tester for any test execution — do not describe test steps; restrict tester calls ONLY on the relevant tests, those changed or affected by changes. Test suite may last tens of minutes, plan a big timeout when delegating. For any PR review, branch diff, 'what changed' or blast-radius question, load the `pr-review` skill first and follow its diff ladder instead of reading changed files in full.",
+      "instructions": "For document ingestion, delegate to doc_ingester, passing the user's original request as context so it can tailor the summary. If the document is a spec or requirements file, instruct doc_ingester to return full content.",
+      "color": "#5c9cf5",
+      "variant": "medium",
+      "temperature": 0.2,
+      "permission": {
+        "edit": {
+          "*": "deny",
+          "PLAN.md": "allow"
+        }
+      }
+    },
+    "coder": {
+      "model": "{env:OC_MODEL_MEDIUM}",
+      "description": "Use for writing, editing, and refactoring code.",
+      "prompt": "Be concise. Write and edit code directly without planning or explanation. Only provide short and meaningful comments. No preamble or summaries unless asked. MUST invoke @tester after any code change requiring tests — do not run tests yourself; restrict tester calls ONLY on the relevant tests, those changed or affected by changes.",
+      "maxTokens": 20000,
+      "maxIterations": 15,
+      "variant": "high",
+      "color": "#7fd88f",
+      "temperature": 0.1
+    },
+    "data-cruncher": {
+      "model": "{env:OC_MODEL_MEDIUM}",
+      "mode": "subagent",
+      "description": "ALWAYS Invoke for ALL databricks data exploration. Prompt with relevant context for data exploration so it can return you meaningful conclusions about what it investigated.  Returns a structured summary of findings to planning agent.",
+      "maxTokens": 10000,
+      "temperature": 0.1,
+      "prompt": "Load the `databricks` skill for query syntax. For run validation / baseline-vs-PR comparison, also load `analytics-run-validation` and follow its probe ladder.\n\nHARD RULES:\n- READ-ONLY: SELECT / SHOW / DESCRIBE only. Never INSERT, UPDATE, DELETE, MERGE, DROP, CREATE, and never trigger jobs.\n- NEVER write Databricks connection code. No `from databricks import sql`, no inline python3 -c / heredoc connector, no reading ~/.databrickscfg, no hand-built /sql/1.0/warehouses paths. Everything goes through the skill's `dbx` helper (`--var/-v` for interpolation, `batch` for multi-query packs, `diff` for A/B, `runctx`/`card`/`coefs` for run probes). If `dbx` cannot express what you need, say so explicitly and stop.\n- Spark SQL on Delta, not ANSI/Postgres. Always fully qualify `catalog.schema.table`.\n- Default env is profile `dev` (serves esxp_dev, esxp_dev_pr, esxp_uat). Only `esxp_prd` needs `--profile prd`. PR data is `esxp_dev_pr.pr<N>_<schema>`.\n- Keep result sets small. Put scratch .sql files in /tmp/opencode/.\n\nReport data-backed findings only: numbers, then a one-line verdict. No prose, no raw dumps, no echoing query text."
+    },
+    "databricks-job-runner": {
+      "description": "Runs a partial Databricks job via a justfile target and summarizes the output according to the scope given in the invocation prompt",
+      "mode": "subagent",
+      "model": "{env:OC_MODEL_LIGHT}",
+      "temperature": 0.2,
+      "tools": { "write": false, "edit": false, "bash": true },
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "just partial_run*": "allow",
+          "just --list": "allow"
+        }
+      },
+      "prompt": "You run a partial Databricks job via a `just` target and report back only what the invoking prompt asked for. Nothing more.\n\n## Procedure\n\n1. Read the invoking prompt carefully and extract:\n   - the args/params for `just partial_run` (e.g. job name, date range, table/task subset)\n   - the **scope of the summary** requested (e.g. \"just tell me if it passed\", \"list failed tasks\", \"give row counts per table\", \"flag anomalies vs last run\")\n2. Run `just partial_run <args>`, capturing full stdout/stderr.\n3. Do not print the raw log back to the user. Parse it and extract only what the requested scope calls for.\n4. If the job fails or exits non-zero, always report the failure and the relevant error lines, regardless of scope, before anything else.\n5. If the scope is ambiguous, default to a short status + key metrics summary, and note what you assumed.\n\n## Output format\n\n- One-line status: `✅ success` / `❌ failed` / `⚠️ succeeded with warnings`\n- Bullet list of the specific items the scope asked for\n- Omit anything not requested — do not pad with unrelated log details\n- If truncating a long log, say how many lines/entries were omitted"
+    },
+    "task": {
+      "model": "{env:OC_MODEL_MEDIUM}",
+      "mode": "subagent",
+      "description": "Use for breaking down and executing multi-step tasks. Invoke automatically for complex workflows requiring sequential steps. Always delegate test execution to @tester.",
+      "maxTokens": 3000,
+      "prompt": "Be concise. Break tasks into minimal steps. No filler text.",
+      "variant": "medium",
+      "temperature": 0.2
+    },
+    "explore": {
+      "model": "{env:OC_MODEL_LIGHT}",
+      "temperature": 0.1
+    },
+    "tester": {
+      "model": "{env:OC_MODEL_LIGHT}",
+      "mode": "subagent",
+      "description": "ALWAYS Invoke for ALL test execution. Returns a structured summary of results.",
+      "maxTokens": 5000,
+      "prompt": "Run ONE script, EXACTLY ONCE, then report.\n\nWhich script:\n- Tests (default): `$HOME/.config/opencode/run-tests.sh` — append the caller's test path/`-k` arguments only if given; otherwise pass none.\n- Quality gates: `$HOME/.config/opencode/run-checks.sh` — use this ONLY when the caller asks for ruff / format / ty / complexipy / codespell / lint / quality gates. Accepts `--changed`, `--base <ref>`, and gate names (`ruff format ty complexipy codespell`).\n\nHARD RULES:\n- The suite is slow by design. This is expected and is NOT a reason to split, batch, or re-run.\n- Never run individual test files to 'check' or 'confirm' something.\n- Never invoke pytest / ruff / ty / uv directly — only the two scripts above.\n- If output looks truncated or the call times out, read the log path printed on line 1 with `tail -n 100 <path>`. Do NOT re-run.\n- Never edit source or test files. Report only.\n\nOutput ONLY this template, nothing before or after:\nSTATUS: PASS|FAIL\nPASSED: <n>  FAILED: <n>  SKIPPED: <n>  ERRORS: <n>\nLOG: <path from line 1 of output>\nFAILURES:\n- <node id or gate name> — <one-line error>\n(omit FAILURES section entirely if none; for run-checks.sh report gate names and counts of failing files)",
+      "temperature": 0
+    },
+    "title": {
+      "model": "{env:OC_MODEL_LIGHT}",
+      "maxTokens": 200,
+      "temperature": 0.5
+    },
+    "summary": {
+      "model": "{env:OC_MODEL_MEDIUM}",
+      "maxTokens": 2500,
+      "temperature": 0.3
+    },
+    "doc_ingester": {
+      "model": "github-copilot/gemini-3.5-flash",
+      "mode": "subagent",
+      "maxTokens": 2000,
+      "system": "You convert documents to markdown using available tools. Summarize the document in the context of the user's task — extract only what's relevant to their request. For specs or when full fidelity is needed, return complete content."
+    }
+  }
+}

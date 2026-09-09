@@ -1,0 +1,23 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "litellm": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LiteLLM (local)",
+      "options": {
+        "baseURL": "https://llm-api.forge.kaizen-solutions.net",
+        "apiKey": "sk-h3-QMnBReJLy9O13ePmNtA",
+        "timeout": 60000
+      },
+      "models": {
+        "gpt-oss-120b": {
+          "name": "gpt-oss-120b"
+        },
+        "Qwen3-Coder-30B-A3B-Instruct": {
+          "name": "Qwen3-Coder-30B-A3B-Instruct"
+        }
+      }
+    }
+  },
+  "model": "Qwen3-Coder-30B-A3B-Instruct"
+}

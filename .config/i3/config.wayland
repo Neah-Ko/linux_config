@@ -1,0 +1,121 @@
+# set modifier
+set $mod Mod4
+set $alt Mod1
+
+# set font
+font pango: Noto Sans 12
+
+# borders
+default_border pixel 1
+default_floating_border pixel 1
+
+# Use Mouse+$alt to drag floating windows to their wanted position
+floating_modifier $alt
+
+#autostart
+exec --no-startup-id xsettingsd &
+
+exec_always --no-startup-id compton --config /home/ejodry/.config/compton.conf
+exec_always --no-startup-id ~/.config/i3/opacity.py > /tmp/opacity_debug.log 2>&1 &
+exec_always --no-startup-id feh --bg-fill '/home/ejodry/Pictures/sunset_after_the_storm.jpg'
+
+
+# start a terminal
+# bindsym $alt+Return exec x-terminal-emulator
+bindsym $alt+Return exec xfce4-terminal
+
+# start dmenu (a program launcher)
+# bindsym $alt+d exec i3-dmenu-desktop --dmenu="dmenu -i -fn 'Noto Sans:size=12'"
+# bindsym $alt+d exec dmenu_run -fn 'Noto Sans:size=12'
+exec_always --no-startup-id dmenu_path > /dev/null &
+bindsym $alt+d exec bash -c 'dmenu_path | grep -E "(^[^.]+$|\.sh$|\.py$|\.pl$|\.rb$)" | dmenu -fn "Noto Sans:size=12" | bash'
+bindsym $alt+Shift+d exec rofi -lines 12 -padding 18 -width 60 -location 0 -show drun -sidebar-mode -columns 3 -font 'Noto Sans 12'
+
+# common apps keybinds
+bindsym Print exec scrot 'Cheese_%a-%d%b%y_%H.%M.png' -e 'viewnior ~/$f'
+
+#change volume
+bindsym XF86AudioRaiseVolume exec amixer -q set Master 5%+
+bindsym XF86AudioLowerVolume exec amixer -q set Master 5%-
+bindsym XF86AudioMute exec amixer set Master toggle
+
+# kill focused window
+bindsym $alt+Shift+a kill
+
+# change focus
+bindsym $alt+Left focus left
+bindsym $alt+Down focus down
+bindsym $alt+Up focus up
+bindsym $alt+Right focus right
+# bindsym $alt+Left exec 'i3-msg focus left; ~/.config/i3/update_tab_focus.sh'
+# bindsym $alt+Right exec 'i3-msg focus right; ~/.config/i3/update_tab_focus.sh'
+
+
+# move focused window
+bindsym $alt+Shift+Left move left
+bindsym $alt+Shift+Down move down
+bindsym $alt+Shift+Up move up
+bindsym $alt+Shift+Right move right
+
+# split in horizontal orientation
+bindsym $alt+h split h
+
+# split in vertical orientation
+bindsym $alt+v split v
+
+# enter fullscreen mode for the focused container
+bindsym $alt+f fullscreen toggle
+
+# change container layout split
+bindsym $alt+s layout stacking
+bindsym $alt+z layout tabbed
+# bindsym $alt+z exec ~/.config/i3/enter_tabbed.sh
+bindsym $alt+e layout toggle split
+# bindsym $alt+e exec ~/.config/i3/enter_tiling.sh
+
+
+# toggle tiling / floating
+bindsym $alt+Shift+space floating toggle
+
+# change focus between tiling / floating windows
+bindsym $alt+space focus mode_toggle
+
+# switch to workspace
+bindsym $alt+Tab workspace next
+bindsym $alt+1 workspace 1
+bindsym $alt+2 workspace 2
+bindsym $alt+3 workspace 3
+bindsym $alt+4 workspace 4
+bindsym $alt+5 workspace 5
+bindsym $alt+6 workspace 6
+
+# move focused container to workspace
+bindsym $alt+Shift+1 move container to workspace 1
+bindsym $alt+Shift+2 move container to workspace 2
+bindsym $alt+Shift+3 move container to workspace 3
+bindsym $alt+Shift+4 move container to workspace 4
+bindsym $alt+Shift+5 move container to workspace 5
+bindsym $alt+Shift+6 move container to workspace 6
+
+# restart i3 inplace (preserves your layout/session, can be used to upgrade i3)
+bindsym $alt+Shift+r restart
+
+# exit i3
+# exit by closing your X-Server instance, usually with Alt+F4
+
+# resize window (you can also use the mouse for that)
+mode "resize" {
+        bindsym Left resize shrink width 5 px or 5 ppt
+        bindsym Down resize grow height 5 px or 5 ppt
+        bindsym Up resize shrink height 5 px or 5 ppt
+        bindsym Right resize grow width 5 px or 5 ppt
+        bindsym Return mode "default"
+}
+bindsym $alt+r mode "resize"
+
+bar {
+        status_command i3status
+}
+
+# Settings
+bindsym $alt+c exec --no-startup-id xfce4-settings-manager
